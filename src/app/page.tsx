@@ -27,36 +27,15 @@ export default function Home() {
     setResult(null);
 
     try {
-      const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY;
-      if (!apiKey) throw new Error("API 키가 설정되지 않았습니다.");
-
-      const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      const res = await fetch("/api/translate", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages: [
-            { role: "system", content: `너는 자연어를 표준 SQL 쿼리로 변환해주는 전문 번역가야. 사용자가 질문을 하면 반드시 아래의 JSON 형식으로만 답변해. 다른 설명이나 인사말은 절대 하지 마.\n{\n  "sql": "생성된 SQL 문장",\n  "explanation": "쿼리에 대한 짧은 한글 설명",\n  "table_hint": "사용된 주요 테이블명"\n}` },
-            { role: "user", content: input },
-          ],
-          temperature: 0.2,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ input }),
       });
 
-      if (!groqRes.ok) {
-        const err = await groqRes.text();
-        throw new Error(`Groq API 오류: ${err}`);
-      }
-
-      const data = await groqRes.json();
-      const text = data.choices?.[0]?.message?.content ?? "";
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("응답에서 JSON을 파싱할 수 없습니다.");
-
-      setResult(JSON.parse(jsonMatch[0]));
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "알 수 없는 오류가 발생했습니다.");
+      setResult(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "알 수 없는 오류가 발생했습니다.");
     } finally {
