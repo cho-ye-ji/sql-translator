@@ -198,8 +198,9 @@ export default function Home() {
                 </span>
                 <div className="relative group">
                   <HelpCircle size={13} className="text-zinc-600 hover:text-zinc-400 cursor-pointer transition-colors" />
-                  <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 hidden group-hover:block z-20">
+                  <div className="absolute left-0 top-full mt-2 w-64 hidden group-hover:block z-20">
                     <div className="bg-zinc-800 border border-zinc-700 rounded-xl p-3 shadow-xl text-xs text-zinc-300 leading-relaxed">
+                      <div className="absolute left-3 bottom-full w-2 h-2 bg-zinc-800 border-l border-t border-zinc-700 rotate-45 -mb-1" />
                       <p className="font-semibold text-zinc-100 mb-1">테이블 컨텍스트란?</p>
                       <p className="text-zinc-400 mb-2">선택사항입니다. 선택하지 않으면 AI가 테이블명을 자유롭게 추측합니다.</p>
                       <ol className="flex flex-col gap-1 text-zinc-400">
@@ -207,7 +208,6 @@ export default function Home() {
                         <li><span className="text-zinc-200">② 검색</span> — 이름으로 검색 후 클릭하여 선택</li>
                         <li><span className="text-zinc-200">③ 변환</span> — 선택된 테이블 기준으로 정확한 SQL 생성</li>
                       </ol>
-                      <div className="absolute left-1/2 -translate-x-1/2 top-full w-2 h-2 bg-zinc-800 border-r border-b border-zinc-700 rotate-45 -mt-1" />
                     </div>
                   </div>
                 </div>
