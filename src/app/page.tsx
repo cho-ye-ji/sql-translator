@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Loader2, Database, Sparkles, TableProperties,
-  Copy, Check, ChevronDown, ChevronUp, Plus, X, Save,
+  Copy, Check, Plus, X, Save, Search,
 } from "lucide-react";
 import { Light as SyntaxHighlighter } from "react-syntax-highlighter";
 import sql from "react-syntax-highlighter/dist/esm/languages/hljs/sql";
@@ -20,7 +20,8 @@ interface SqlResult {
 interface TableEntry {
   id: string;
   label: string;
-  content: string; // Java 엔티티 코드 or 직접 입력 스키마
+  tableName: string; // 표시용 테이블명 (예: PLUSCMS.TA_BILLING)
+  content: string;   // Java 엔티티 or 스키마 원문
 }
 
 const STORAGE_KEY = "sql-translator-tables";
@@ -35,14 +36,29 @@ export default function Home() {
   // 테이블 컨텍스트
   const [tables, setTables] = useState<TableEntry[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [contextOpen, setContextOpen] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [newLabel, setNewLabel] = useState("");
+  const [newTableName, setNewTableName] = useState("");
   const [newContent, setNewContent] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) setTables(JSON.parse(saved));
+  }, []);
+
+  // 드롭다운 외부 클릭 시 닫기
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+        setSearchQuery("");
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   function saveTables(updated: TableEntry[]) {
@@ -55,30 +71,47 @@ export default function Home() {
     const entry: TableEntry = {
       id: Date.now().toString(),
       label: newLabel.trim(),
+      tableName: newTableName.trim() || newLabel.trim(),
       content: newContent.trim(),
     };
     saveTables([...tables, entry]);
     setNewLabel("");
+    setNewTableName("");
     setNewContent("");
     setAddOpen(false);
     setSelectedIds((prev) => [...prev, entry.id]);
   }
 
-  function handleDeleteTable(id: string) {
+  function handleDeleteTable(id: string, e: React.MouseEvent) {
+    e.stopPropagation();
     saveTables(tables.filter((t) => t.id !== id));
     setSelectedIds((prev) => prev.filter((sid) => sid !== id));
   }
 
-  function toggleSelect(id: string) {
+  function handleSelect(id: string) {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((sid) => sid !== id) : [...prev, id]
     );
+    setDropdownOpen(false);
+    setSearchQuery("");
   }
+
+  function removeSelected(id: string) {
+    setSelectedIds((prev) => prev.filter((sid) => sid !== id));
+  }
+
+  const filtered = tables.filter((t) => {
+    const q = searchQuery.toLowerCase();
+    return (
+      t.label.toLowerCase().includes(q) ||
+      t.tableName.toLowerCase().includes(q)
+    );
+  });
 
   function buildSchema() {
     return tables
       .filter((t) => selectedIds.includes(t.id))
-      .map((t) => `// ${t.label}\n${t.content}`)
+      .map((t) => `// ${t.label} (${t.tableName})\n${t.content}`)
       .join("\n\n");
   }
 
@@ -93,14 +126,12 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setResult(null);
-
     try {
       const res = await fetch("/api/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ input, schema: buildSchema() }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "알 수 없는 오류가 발생했습니다.");
       setResult(data);
@@ -112,9 +143,7 @@ export default function Home() {
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      handleTranslate();
-    }
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleTranslate();
   }
 
   const SqlBlock = ({ sqlText }: { sqlText: string }) => (
@@ -161,104 +190,130 @@ export default function Home() {
         <div className="flex flex-col w-full md:w-1/2 border-r border-zinc-800 p-6 gap-4 overflow-y-auto">
 
           {/* 테이블 컨텍스트 */}
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden">
-            <button
-              onClick={() => setContextOpen((v) => !v)}
-              className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <TableProperties size={14} className="text-zinc-400" />
-                <span className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
-                  테이블 컨텍스트
-                </span>
-                {selectedIds.length > 0 && (
-                  <span className="text-xs bg-blue-600 text-white rounded-full px-2 py-0.5">
-                    {selectedIds.length}
-                  </span>
-                )}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                테이블 컨텍스트
+              </span>
+              <button
+                onClick={() => { setAddOpen((v) => !v); setDropdownOpen(false); }}
+                className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                <Plus size={12} />
+                테이블 추가
+              </button>
+            </div>
+
+            {/* 선택된 칩 */}
+            {selectedIds.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {selectedIds.map((id) => {
+                  const t = tables.find((t) => t.id === id);
+                  if (!t) return null;
+                  return (
+                    <span
+                      key={id}
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-600 border border-blue-500 text-white"
+                    >
+                      {t.label}
+                      <span className="opacity-60 font-mono">{t.tableName}</span>
+                      <button onClick={() => removeSelected(id)} className="hover:text-blue-200 transition-colors">
+                        <X size={11} />
+                      </button>
+                    </span>
+                  );
+                })}
               </div>
-              {contextOpen ? <ChevronUp size={14} className="text-zinc-500" /> : <ChevronDown size={14} className="text-zinc-500" />}
-            </button>
+            )}
 
-            {contextOpen && (
-              <div className="px-4 pb-4 flex flex-col gap-3 border-t border-zinc-800">
+            {/* 검색창 + 드롭다운 */}
+            <div className="relative" ref={dropdownRef}>
+              <div className="flex items-center gap-2 rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-2.5 focus-within:ring-2 focus-within:ring-blue-500">
+                <Search size={13} className="text-zinc-500 shrink-0" />
+                <input
+                  type="text"
+                  className="flex-1 bg-transparent text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none"
+                  placeholder={tables.length === 0 ? "저장된 테이블 없음 — 오른쪽 상단에서 추가" : "테이블 검색..."}
+                  value={searchQuery}
+                  onChange={(e) => { setSearchQuery(e.target.value); setDropdownOpen(true); }}
+                  onFocus={() => setDropdownOpen(true)}
+                  disabled={tables.length === 0}
+                />
+              </div>
 
-                {/* 저장된 테이블 없을 때 */}
-                {tables.length === 0 && !addOpen && (
-                  <p className="text-xs text-zinc-600 pt-3">
-                    저장된 테이블이 없습니다. 아래에서 추가하세요.
-                  </p>
-                )}
-
-                {/* 저장된 테이블 칩 */}
-                {tables.length > 0 && (
-                  <div className="flex flex-wrap gap-2 pt-3">
-                    {tables.map((t) => (
-                      <div key={t.id} className="flex items-center gap-1">
-                        <button
-                          onClick={() => toggleSelect(t.id)}
-                          className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                            selectedIds.includes(t.id)
-                              ? "bg-blue-600 border-blue-500 text-white"
-                              : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200"
-                          }`}
+              {dropdownOpen && tables.length > 0 && (
+                <div className="absolute z-10 mt-1 w-full rounded-xl bg-zinc-900 border border-zinc-800 shadow-xl overflow-hidden">
+                  {filtered.length === 0 ? (
+                    <p className="px-4 py-3 text-xs text-zinc-600">검색 결과 없음</p>
+                  ) : (
+                    filtered.map((t) => {
+                      const isSelected = selectedIds.includes(t.id);
+                      return (
+                        <div
+                          key={t.id}
+                          className={`flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-zinc-800 transition-colors ${isSelected ? "opacity-40" : ""}`}
+                          onClick={() => !isSelected && handleSelect(t.id)}
                         >
-                          {t.label}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteTable(t.id)}
-                          className="text-zinc-600 hover:text-red-400 transition-colors"
-                        >
-                          <X size={12} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-zinc-200">{t.label}</span>
+                            <span className="text-xs text-zinc-500 font-mono">{t.tableName}</span>
+                          </div>
+                          <button
+                            onClick={(e) => handleDeleteTable(t.id, e)}
+                            className="text-zinc-600 hover:text-red-400 transition-colors p-1"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
 
-                {/* 추가 폼 */}
-                {addOpen ? (
-                  <div className="flex flex-col gap-2 pt-1">
-                    <textarea
-                      className="rounded-lg bg-zinc-950 border border-zinc-700 p-3 text-zinc-300 placeholder-zinc-600 resize-none text-xs font-mono leading-relaxed focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      rows={6}
-                      placeholder={"Java 엔티티 또는 스키마 직접 입력\n\n예시 1 (Java 엔티티):\n@Table(schema=\"PLUSCMS\", name=\"TA_BILLING\")\npublic class BillingRoot {\n  private String clamStdUiqNo;\n  private String billTitle;\n}\n\n예시 2 (직접):\nta.member(member_id, name, email, join_dt)"}
-                      value={newContent}
-                      onChange={(e) => setNewContent(e.target.value)}
-                    />
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        className="flex-1 rounded-lg bg-zinc-950 border border-zinc-700 px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        placeholder="테이블 이름 (예: 청구)"
-                        value={newLabel}
-                        onChange={(e) => setNewLabel(e.target.value)}
-                      />
-                      <button
-                        onClick={handleAddTable}
-                        disabled={!newLabel.trim() || !newContent.trim()}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-xs font-medium transition-colors"
-                      >
-                        <Save size={12} />
-                        저장
-                      </button>
-                      <button
-                        onClick={() => { setAddOpen(false); setNewLabel(""); setNewContent(""); }}
-                        className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-400 transition-colors"
-                      >
-                        취소
-                      </button>
-                    </div>
-                  </div>
-                ) : (
+            {/* 테이블 추가 폼 */}
+            {addOpen && (
+              <div className="flex flex-col gap-2 rounded-xl bg-zinc-900 border border-zinc-800 p-4">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="flex-1 rounded-lg bg-zinc-950 border border-zinc-700 px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder="이름 (예: 청구)"
+                    value={newLabel}
+                    onChange={(e) => setNewLabel(e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    className="flex-1 rounded-lg bg-zinc-950 border border-zinc-700 px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder="테이블명 (예: PLUSCMS.TA_BILLING)"
+                    value={newTableName}
+                    onChange={(e) => setNewTableName(e.target.value)}
+                  />
+                </div>
+                <textarea
+                  className="rounded-lg bg-zinc-950 border border-zinc-700 p-3 text-zinc-300 placeholder-zinc-600 resize-none text-xs font-mono leading-relaxed focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  rows={5}
+                  placeholder={"Java 엔티티 또는 스키마 직접 입력\n\n예시 1 (Java 엔티티):\n@Table(schema=\"PLUSCMS\", name=\"TA_BILLING\")\npublic class BillingRoot {\n  private String clamStdUiqNo;\n  private String billTitle;\n}\n\n예시 2 (직접):\nta.member(member_id, name, email, join_dt)"}
+                  value={newContent}
+                  onChange={(e) => setNewContent(e.target.value)}
+                />
+                <div className="flex gap-2 justify-end">
                   <button
-                    onClick={() => setAddOpen(true)}
-                    className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors pt-1"
+                    onClick={() => { setAddOpen(false); setNewLabel(""); setNewTableName(""); setNewContent(""); }}
+                    className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-400 transition-colors"
                   >
-                    <Plus size={13} />
-                    테이블 추가
+                    취소
                   </button>
-                )}
+                  <button
+                    onClick={handleAddTable}
+                    disabled={!newLabel.trim() || !newContent.trim()}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-xs font-medium transition-colors"
+                  >
+                    <Save size={12} />
+                    저장
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -269,7 +324,7 @@ export default function Home() {
             <p className="text-zinc-500 text-xs">
               {selectedIds.length > 0
                 ? `선택된 테이블 기준으로 SQL을 생성합니다.`
-                : "테이블 미선택 시 AI가 테이블명을 추측합니다."}
+                : "테이블 미선택 시 AI가 테이블명을 자유롭게 생성합니다."}
             </p>
           </div>
 
