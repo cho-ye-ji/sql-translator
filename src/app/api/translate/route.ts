@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const SYSTEM_PROMPT = `너는 자연어를 표준 SQL 쿼리로 변환해주는 전문 번역가야. 사용자가 질문을 하면 반드시 아래의 JSON 형식으로만 답변해. 다른 설명이나 인사말은 절대 하지 마.
+const BASE_PROMPT = `너는 자연어를 표준 SQL 쿼리로 변환해주는 전문 번역가야. 사용자가 질문을 하면 반드시 아래의 JSON 형식으로만 답변해. 다른 설명이나 인사말은 절대 하지 마.
 {
   "sql": "생성된 SQL 문장",
   "explanation": "쿼리에 대한 짧은 한글 설명",
@@ -8,7 +8,7 @@ const SYSTEM_PROMPT = `너는 자연어를 표준 SQL 쿼리로 변환해주는 
 }`;
 
 export async function POST(req: NextRequest) {
-  const { input } = await req.json();
+  const { input, schema } = await req.json();
 
   if (!input?.trim()) {
     return NextResponse.json({ error: "입력값이 없습니다." }, { status: 400 });
@@ -19,6 +19,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "GROQ_API_KEY가 설정되지 않았습니다." }, { status: 500 });
   }
 
+  const systemPrompt = schema?.trim()
+    ? `${BASE_PROMPT}\n\n아래 Java 엔티티 또는 스키마 정보를 반드시 참고해서 실제 테이블명과 컬럼명을 사용해. camelCase 필드는 SNAKE_CASE 컬럼명으로 변환해서 사용해:\n\n${schema}`
+    : BASE_PROMPT;
+
   const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -28,7 +32,7 @@ export async function POST(req: NextRequest) {
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         { role: "user", content: input },
       ],
       temperature: 0.2,
