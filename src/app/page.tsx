@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Database, Sparkles, TableProperties } from "lucide-react";
+import { Loader2, Database, Sparkles, TableProperties, Copy, Check } from "lucide-react";
 import { Light as SyntaxHighlighter } from "react-syntax-highlighter";
 import sql from "react-syntax-highlighter/dist/esm/languages/hljs/sql";
 import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
@@ -19,6 +19,13 @@ export default function Home() {
   const [result, setResult] = useState<SqlResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy(text: string) {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   async function handleTranslate() {
     if (!input.trim()) return;
@@ -116,7 +123,16 @@ export default function Home() {
           {result && (
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
-                <span className="text-xs font-semibold uppercase tracking-widest text-zinc-500">SQL</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-widest text-zinc-500">SQL</span>
+                  <button
+                    onClick={() => handleCopy(result.sql)}
+                    className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+                  >
+                    {copied ? <Check size={13} className="text-green-400" /> : <Copy size={13} />}
+                    {copied ? "복사됨" : "복사"}
+                  </button>
+                </div>
                 <SyntaxHighlighter
                   language="sql"
                   style={atomOneDark}
@@ -163,6 +179,16 @@ export default function Home() {
 
             {result && (
               <>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-widest text-zinc-500">SQL</span>
+                  <button
+                    onClick={() => handleCopy(result.sql)}
+                    className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+                  >
+                    {copied ? <Check size={13} className="text-green-400" /> : <Copy size={13} />}
+                    {copied ? "복사됨" : "복사"}
+                  </button>
+                </div>
                 <SyntaxHighlighter
                   language="sql"
                   style={atomOneDark}
