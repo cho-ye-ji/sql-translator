@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Loader2, Database, Sparkles, TableProperties,
-  Copy, Check, Plus, X, Save, Search,
+  Copy, Check, Plus, X, Save, Search, HelpCircle,
 } from "lucide-react";
 import { Light as SyntaxHighlighter } from "react-syntax-highlighter";
 import sql from "react-syntax-highlighter/dist/esm/languages/hljs/sql";
@@ -192,9 +192,26 @@ export default function Home() {
           {/* 테이블 컨텍스트 */}
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
-                테이블 컨텍스트
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                  테이블 컨텍스트
+                </span>
+                <div className="relative group">
+                  <HelpCircle size={13} className="text-zinc-600 hover:text-zinc-400 cursor-pointer transition-colors" />
+                  <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 hidden group-hover:block z-20">
+                    <div className="bg-zinc-800 border border-zinc-700 rounded-xl p-3 shadow-xl text-xs text-zinc-300 leading-relaxed">
+                      <p className="font-semibold text-zinc-100 mb-1">테이블 컨텍스트란?</p>
+                      <p className="text-zinc-400 mb-2">선택사항입니다. 선택하지 않으면 AI가 테이블명을 자유롭게 추측합니다.</p>
+                      <ol className="flex flex-col gap-1 text-zinc-400">
+                        <li><span className="text-zinc-200">① 추가</span> — Java 엔티티 또는 스키마를 저장</li>
+                        <li><span className="text-zinc-200">② 검색</span> — 이름으로 검색 후 클릭하여 선택</li>
+                        <li><span className="text-zinc-200">③ 변환</span> — 선택된 테이블 기준으로 정확한 SQL 생성</li>
+                      </ol>
+                      <div className="absolute left-1/2 -translate-x-1/2 top-full w-2 h-2 bg-zinc-800 border-r border-b border-zinc-700 rotate-45 -mt-1" />
+                    </div>
+                  </div>
+                </div>
+              </div>
               <button
                 onClick={() => { setAddOpen((v) => !v); setDropdownOpen(false); }}
                 className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
