@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   Loader2, Database, Sparkles, TableProperties,
   Copy, Check, Plus, X, Save, Search, HelpCircle,
+  AlertTriangle, CheckCircle2,
 } from "lucide-react";
 import { Light as SyntaxHighlighter } from "react-syntax-highlighter";
 import sql from "react-syntax-highlighter/dist/esm/languages/hljs/sql";
@@ -32,6 +33,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [schemaUsed, setSchemaUsed] = useState(false);
 
   // 테이블 컨텍스트
   const [tables, setTables] = useState<TableEntry[]>([]);
@@ -123,6 +125,8 @@ export default function Home() {
 
   async function handleTranslate() {
     if (!input.trim()) return;
+    const schema = buildSchema();
+    setSchemaUsed(!!schema.trim());
     setLoading(true);
     setError(null);
     setResult(null);
@@ -130,7 +134,7 @@ export default function Home() {
       const res = await fetch("/api/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input, schema: buildSchema() }),
+        body: JSON.stringify({ input, schema }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "알 수 없는 오류가 발생했습니다.");
@@ -176,6 +180,18 @@ export default function Home() {
     </div>
   );
 
+  const SchemaBadge = () => schemaUsed ? (
+    <div className="flex items-center gap-1.5 text-xs text-green-400">
+      <CheckCircle2 size={13} />
+      <span>등록된 스키마 기반</span>
+    </div>
+  ) : (
+    <div className="flex items-center gap-1.5 text-xs text-amber-400">
+      <AlertTriangle size={13} />
+      <span>테이블명은 AI 추측 — 실제와 다를 수 있음</span>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
       {/* Header */}
@@ -201,12 +217,12 @@ export default function Home() {
                   <div className="absolute left-0 top-full mt-2 w-64 hidden group-hover:block z-20">
                     <div className="bg-zinc-800 border border-zinc-700 rounded-xl p-3 shadow-xl text-xs text-zinc-300 leading-relaxed">
                       <div className="absolute left-3 bottom-full w-2 h-2 bg-zinc-800 border-l border-t border-zinc-700 rotate-45 -mb-1" />
-                      <p className="font-semibold text-zinc-100 mb-1">테이블 컨텍스트란?</p>
-                      <p className="text-zinc-400 mb-2">선택사항입니다. 선택하지 않으면 AI가 테이블명을 자유롭게 추측합니다.</p>
+                      <p className="font-semibold text-zinc-100 mb-1">왜 테이블을 등록해야 하나요?</p>
+                      <p className="text-zinc-400 mb-2">등록하지 않으면 AI가 테이블명을 임의로 생성합니다. 실무에서 바로 쓰려면 반드시 등록하세요.</p>
                       <ol className="flex flex-col gap-1 text-zinc-400">
                         <li><span className="text-zinc-200">① 추가</span> — Java 엔티티 또는 스키마를 저장</li>
                         <li><span className="text-zinc-200">② 검색</span> — 이름으로 검색 후 클릭하여 선택</li>
-                        <li><span className="text-zinc-200">③ 변환</span> — 선택된 테이블 기준으로 정확한 SQL 생성</li>
+                        <li><span className="text-zinc-200">③ 변환</span> — 실제 테이블명/컬럼명으로 SQL 생성</li>
                       </ol>
                     </div>
                   </div>
@@ -220,6 +236,44 @@ export default function Home() {
                 테이블 추가
               </button>
             </div>
+
+            {/* 온보딩: 테이블 미등록 상태 */}
+            {tables.length === 0 && !addOpen && (
+              <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-900/50 p-4 flex flex-col gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 rounded-lg bg-blue-500/10 p-2 shrink-0">
+                    <Database size={15} className="text-blue-400" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <p className="text-sm font-medium text-zinc-200">테이블을 등록하면 실무에 맞는 SQL이 생성됩니다</p>
+                    <p className="text-xs text-zinc-500 leading-relaxed">
+                      등록 없이도 변환할 수 있지만, 테이블명·컬럼명은 AI가 임의로 만들어 실제와 다를 수 있습니다.
+                    </p>
+                  </div>
+                </div>
+                <ol className="flex flex-col gap-1.5 text-xs text-zinc-400 pl-1">
+                  <li className="flex items-center gap-2">
+                    <span className="text-blue-400 font-mono text-[10px]">01</span>
+                    우측 상단 "테이블 추가" 클릭
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-blue-400 font-mono text-[10px]">02</span>
+                    Java 엔티티 또는 스키마 붙여넣기
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-blue-400 font-mono text-[10px]">03</span>
+                    테이블 선택 후 변환 — 실제 컬럼명으로 정확한 SQL 생성
+                  </li>
+                </ol>
+                <button
+                  onClick={() => setAddOpen(true)}
+                  className="self-start flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 px-3 py-1.5 text-xs font-medium transition-colors"
+                >
+                  <Plus size={12} />
+                  지금 등록하기
+                </button>
+              </div>
+            )}
 
             {/* 선택된 칩 */}
             {selectedIds.length > 0 && (
@@ -243,51 +297,62 @@ export default function Home() {
               </div>
             )}
 
-            {/* 검색창 + 드롭다운 */}
-            <div className="relative" ref={dropdownRef}>
-              <div className="flex items-center gap-2 rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-2.5 focus-within:ring-2 focus-within:ring-blue-500">
-                <Search size={13} className="text-zinc-500 shrink-0" />
-                <input
-                  type="text"
-                  className="flex-1 bg-transparent text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none"
-                  placeholder={tables.length === 0 ? "저장된 테이블 없음 — 오른쪽 상단에서 추가" : "테이블 검색..."}
-                  value={searchQuery}
-                  onChange={(e) => { setSearchQuery(e.target.value); setDropdownOpen(true); }}
-                  onFocus={() => setDropdownOpen(true)}
-                  disabled={tables.length === 0}
-                />
-              </div>
+            {/* 검색창 + 드롭다운 (테이블 있을 때만) */}
+            {tables.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <div className="relative" ref={dropdownRef}>
+                  <div className="flex items-center gap-2 rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-2.5 focus-within:ring-2 focus-within:ring-blue-500">
+                    <Search size={13} className="text-zinc-500 shrink-0" />
+                    <input
+                      type="text"
+                      className="flex-1 bg-transparent text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none"
+                      placeholder="테이블 검색..."
+                      value={searchQuery}
+                      onChange={(e) => { setSearchQuery(e.target.value); setDropdownOpen(true); }}
+                      onFocus={() => setDropdownOpen(true)}
+                    />
+                  </div>
 
-              {dropdownOpen && tables.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full rounded-xl bg-zinc-900 border border-zinc-800 shadow-xl overflow-hidden">
-                  {filtered.length === 0 ? (
-                    <p className="px-4 py-3 text-xs text-zinc-600">검색 결과 없음</p>
-                  ) : (
-                    filtered.map((t) => {
-                      const isSelected = selectedIds.includes(t.id);
-                      return (
-                        <div
-                          key={t.id}
-                          className={`flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-zinc-800 transition-colors ${isSelected ? "opacity-40" : ""}`}
-                          onClick={() => !isSelected && handleSelect(t.id)}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-zinc-200">{t.label}</span>
-                            <span className="text-xs text-zinc-500 font-mono">{t.tableName}</span>
-                          </div>
-                          <button
-                            onClick={(e) => handleDeleteTable(t.id, e)}
-                            className="text-zinc-600 hover:text-red-400 transition-colors p-1"
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-                      );
-                    })
+                  {dropdownOpen && (
+                    <div className="absolute z-10 mt-1 w-full rounded-xl bg-zinc-900 border border-zinc-800 shadow-xl overflow-hidden">
+                      {filtered.length === 0 ? (
+                        <p className="px-4 py-3 text-xs text-zinc-600">검색 결과 없음</p>
+                      ) : (
+                        filtered.map((t) => {
+                          const isSelected = selectedIds.includes(t.id);
+                          return (
+                            <div
+                              key={t.id}
+                              className={`flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-zinc-800 transition-colors ${isSelected ? "opacity-40" : ""}`}
+                              onClick={() => !isSelected && handleSelect(t.id)}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-zinc-200">{t.label}</span>
+                                <span className="text-xs text-zinc-500 font-mono">{t.tableName}</span>
+                              </div>
+                              <button
+                                onClick={(e) => handleDeleteTable(t.id, e)}
+                                className="text-zinc-600 hover:text-red-400 transition-colors p-1"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
+
+                {/* 힌트: 테이블 있지만 선택 안 했을 때 */}
+                {selectedIds.length === 0 && (
+                  <p className="text-xs text-amber-500/80 flex items-center gap-1.5">
+                    <AlertTriangle size={11} />
+                    테이블을 선택하면 실제 컬럼명으로 정확한 SQL이 생성됩니다
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* 테이블 추가 폼 */}
             {addOpen && (
@@ -341,7 +406,7 @@ export default function Home() {
             <p className="text-zinc-500 text-xs">
               {selectedIds.length > 0
                 ? `선택된 테이블 기준으로 SQL을 생성합니다.`
-                : "테이블 미선택 시 AI가 테이블명을 자유롭게 생성합니다."}
+                : "테이블 미선택 시 AI가 테이블명을 임의로 생성합니다."}
             </p>
           </div>
 
@@ -366,9 +431,12 @@ export default function Home() {
 
         {/* 오른쪽: 결과 패널 (데스크탑) */}
         <div className="hidden md:flex flex-col w-1/2 p-6 gap-4 overflow-y-auto">
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-semibold uppercase tracking-widest text-zinc-500">변환 결과</span>
-            <p className="text-zinc-500 text-xs">생성된 SQL 쿼리가 여기에 표시됩니다.</p>
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-semibold uppercase tracking-widest text-zinc-500">변환 결과</span>
+              <p className="text-zinc-500 text-xs">생성된 SQL 쿼리가 여기에 표시됩니다.</p>
+            </div>
+            {result && <SchemaBadge />}
           </div>
 
           {!result && !loading && !error && (
@@ -412,7 +480,10 @@ export default function Home() {
         {/* 모바일: 결과를 입력 아래에 표시 */}
         {(result || error) && (
           <div className="md:hidden w-full border-t border-zinc-800 p-6 flex flex-col gap-4">
-            <span className="text-xs font-semibold uppercase tracking-widest text-zinc-500">변환 결과</span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-widest text-zinc-500">변환 결과</span>
+              {result && <SchemaBadge />}
+            </div>
             {error && (
               <div className="rounded-xl border border-red-800 bg-red-950/40 p-4 text-red-400 text-sm">
                 {error}
