@@ -18,14 +18,20 @@ interface SqlResult {
   table_hint: string;
 }
 
+interface Column {
+  name: string;        // 컬럼명 (예: MEMBER_ID)
+  description: string; // 설명 (예: 회원 아이디)
+}
+
 interface TableEntry {
   id: string;
   label: string;
-  tableName: string; // 표시용 테이블명 (예: PLUSCMS.TA_BILLING)
-  content: string;   // Java 엔티티 or 스키마 원문
+  tableName: string;
+  columns: Column[];
 }
 
 const STORAGE_KEY = "sql-translator-tables";
+const EMPTY_COLUMN: Column = { name: "", description: "" };
 
 export default function Home() {
   const [input, setInput] = useState("");
@@ -43,15 +49,19 @@ export default function Home() {
   const [addOpen, setAddOpen] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newTableName, setNewTableName] = useState("");
-  const [newContent, setNewContent] = useState("");
+  const [newColumns, setNewColumns] = useState<Column[]>([{ ...EMPTY_COLUMN }]);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) setTables(JSON.parse(saved));
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      // 구 포맷(content 필드) 마이그레이션: columns가 없는 항목은 제외
+      const migrated = parsed.filter((t: any) => Array.isArray(t.columns));
+      setTables(migrated);
+    }
   }, []);
 
-  // 드롭다운 외부 클릭 시 닫기
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -68,18 +78,31 @@ export default function Home() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   }
 
+  function updateColumn(i: number, field: keyof Column, value: string) {
+    setNewColumns((prev) => prev.map((c, idx) => idx === i ? { ...c, [field]: value } : c));
+  }
+
+  function addColumn() {
+    setNewColumns((prev) => [...prev, { ...EMPTY_COLUMN }]);
+  }
+
+  function removeColumn(i: number) {
+    setNewColumns((prev) => prev.length === 1 ? prev : prev.filter((_, idx) => idx !== i));
+  }
+
   function handleAddTable() {
-    if (!newLabel.trim() || !newContent.trim()) return;
+    const validColumns = newColumns.filter((c) => c.name.trim());
+    if (!newLabel.trim() || validColumns.length === 0) return;
     const entry: TableEntry = {
       id: Date.now().toString(),
       label: newLabel.trim(),
       tableName: newTableName.trim() || newLabel.trim(),
-      content: newContent.trim(),
+      columns: validColumns.map((c) => ({ name: c.name.trim(), description: c.description.trim() })),
     };
     saveTables([...tables, entry]);
     setNewLabel("");
     setNewTableName("");
-    setNewContent("");
+    setNewColumns([{ ...EMPTY_COLUMN }]);
     setAddOpen(false);
     setSelectedIds((prev) => [...prev, entry.id]);
   }
@@ -113,7 +136,12 @@ export default function Home() {
   function buildSchema() {
     return tables
       .filter((t) => selectedIds.includes(t.id))
-      .map((t) => `// ${t.label} (${t.tableName})\n${t.content}`)
+      .map((t) => {
+        const cols = t.columns
+          .map((c) => `- ${c.name}${c.description ? `: ${c.description}` : ""}`)
+          .join("\n");
+        return `TABLE: ${t.tableName} (${t.label})\nCOLUMNS:\n${cols}`;
+      })
       .join("\n\n");
   }
 
@@ -218,11 +246,11 @@ export default function Home() {
                     <div className="bg-zinc-800 border border-zinc-700 rounded-xl p-3 shadow-xl text-xs text-zinc-300 leading-relaxed">
                       <div className="absolute left-3 bottom-full w-2 h-2 bg-zinc-800 border-l border-t border-zinc-700 rotate-45 -mb-1" />
                       <p className="font-semibold text-zinc-100 mb-1">왜 테이블을 등록해야 하나요?</p>
-                      <p className="text-zinc-400 mb-2">등록하지 않으면 AI가 테이블명을 임의로 생성합니다. 실무에서 바로 쓰려면 반드시 등록하세요.</p>
+                      <p className="text-zinc-400 mb-2">등록하지 않으면 AI가 테이블명·컬럼명을 임의로 생성합니다. 실무에서 바로 쓰려면 반드시 등록하세요.</p>
                       <ol className="flex flex-col gap-1 text-zinc-400">
-                        <li><span className="text-zinc-200">① 추가</span> — Java 엔티티 또는 스키마를 저장</li>
+                        <li><span className="text-zinc-200">① 추가</span> — 테이블명과 컬럼 목록 등록</li>
                         <li><span className="text-zinc-200">② 검색</span> — 이름으로 검색 후 클릭하여 선택</li>
-                        <li><span className="text-zinc-200">③ 변환</span> — 실제 테이블명/컬럼명으로 SQL 생성</li>
+                        <li><span className="text-zinc-200">③ 변환</span> — 실제 컬럼명으로 정확한 SQL 생성</li>
                       </ol>
                     </div>
                   </div>
@@ -254,15 +282,15 @@ export default function Home() {
                 <ol className="flex flex-col gap-1.5 text-xs text-zinc-400 pl-1">
                   <li className="flex items-center gap-2">
                     <span className="text-blue-400 font-mono text-[10px]">01</span>
-                    우측 상단 "테이블 추가" 클릭
+                    "테이블 추가" 클릭 후 테이블명·컬럼 입력
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="text-blue-400 font-mono text-[10px]">02</span>
-                    Java 엔티티 또는 스키마 붙여넣기
+                    검색창에서 테이블 선택
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="text-blue-400 font-mono text-[10px]">03</span>
-                    테이블 선택 후 변환 — 실제 컬럼명으로 정확한 SQL 생성
+                    자연어 입력 → 실제 컬럼명으로 정확한 SQL 생성
                   </li>
                 </ol>
                 <button
@@ -326,13 +354,18 @@ export default function Home() {
                               className={`flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-zinc-800 transition-colors ${isSelected ? "opacity-40" : ""}`}
                               onClick={() => !isSelected && handleSelect(t.id)}
                             >
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm text-zinc-200">{t.label}</span>
-                                <span className="text-xs text-zinc-500 font-mono">{t.tableName}</span>
+                              <div className="flex flex-col gap-0.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm text-zinc-200">{t.label}</span>
+                                  <span className="text-xs text-zinc-500 font-mono">{t.tableName}</span>
+                                </div>
+                                <span className="text-[11px] text-zinc-600">
+                                  {t.columns.map((c) => c.name).join(", ")}
+                                </span>
                               </div>
                               <button
                                 onClick={(e) => handleDeleteTable(t.id, e)}
-                                className="text-zinc-600 hover:text-red-400 transition-colors p-1"
+                                className="text-zinc-600 hover:text-red-400 transition-colors p-1 shrink-0"
                               >
                                 <X size={12} />
                               </button>
@@ -344,7 +377,6 @@ export default function Home() {
                   )}
                 </div>
 
-                {/* 힌트: 테이블 있지만 선택 안 했을 때 */}
                 {selectedIds.length === 0 && (
                   <p className="text-xs text-amber-500/80 flex items-center gap-1.5">
                     <AlertTriangle size={11} />
@@ -356,40 +388,86 @@ export default function Home() {
 
             {/* 테이블 추가 폼 */}
             {addOpen && (
-              <div className="flex flex-col gap-2 rounded-xl bg-zinc-900 border border-zinc-800 p-4">
+              <div className="flex flex-col gap-3 rounded-xl bg-zinc-900 border border-zinc-800 p-4">
+                {/* 테이블 기본 정보 */}
                 <div className="flex gap-2">
                   <input
                     type="text"
                     className="flex-1 rounded-lg bg-zinc-950 border border-zinc-700 px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="이름 (예: 청구)"
+                    placeholder="이름 (예: 회원)"
                     value={newLabel}
                     onChange={(e) => setNewLabel(e.target.value)}
                   />
                   <input
                     type="text"
                     className="flex-1 rounded-lg bg-zinc-950 border border-zinc-700 px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="테이블명 (예: PLUSCMS.TA_BILLING)"
+                    placeholder="테이블명 (예: PLUSCMS.TA_MEMBER)"
                     value={newTableName}
                     onChange={(e) => setNewTableName(e.target.value)}
                   />
                 </div>
-                <textarea
-                  className="rounded-lg bg-zinc-950 border border-zinc-700 p-3 text-zinc-300 placeholder-zinc-600 resize-none text-xs font-mono leading-relaxed focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  rows={5}
-                  placeholder={"Java 엔티티 또는 스키마 직접 입력\n\n예시 1 (Java 엔티티):\n@Table(schema=\"PLUSCMS\", name=\"TA_BILLING\")\npublic class BillingRoot {\n  private String clamStdUiqNo;\n  private String billTitle;\n}\n\n예시 2 (직접):\nta.member(member_id, name, email, join_dt)"}
-                  value={newContent}
-                  onChange={(e) => setNewContent(e.target.value)}
-                />
-                <div className="flex gap-2 justify-end">
+
+                {/* 컬럼 목록 */}
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-zinc-500 font-semibold uppercase tracking-widest">컬럼</span>
+                    <button
+                      onClick={addColumn}
+                      className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                    >
+                      <Plus size={11} />
+                      추가
+                    </button>
+                  </div>
+
+                  {/* 헤더 */}
+                  <div className="grid grid-cols-[1fr_1fr_20px] gap-2 px-1">
+                    <span className="text-[10px] text-zinc-600 uppercase tracking-widest">컬럼명</span>
+                    <span className="text-[10px] text-zinc-600 uppercase tracking-widest">설명</span>
+                    <span />
+                  </div>
+
+                  {newColumns.map((col, i) => (
+                    <div key={i} className="grid grid-cols-[1fr_1fr_20px] gap-2 items-center">
+                      <input
+                        type="text"
+                        className="rounded-lg bg-zinc-950 border border-zinc-700 px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        placeholder="MEMBER_ID"
+                        value={col.name}
+                        onChange={(e) => updateColumn(i, "name", e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        className="rounded-lg bg-zinc-950 border border-zinc-700 px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        placeholder="회원 아이디"
+                        value={col.description}
+                        onChange={(e) => updateColumn(i, "description", e.target.value)}
+                      />
+                      <button
+                        onClick={() => removeColumn(i)}
+                        className="text-zinc-600 hover:text-red-400 transition-colors flex items-center justify-center"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 justify-end pt-1">
                   <button
-                    onClick={() => { setAddOpen(false); setNewLabel(""); setNewTableName(""); setNewContent(""); }}
+                    onClick={() => {
+                      setAddOpen(false);
+                      setNewLabel("");
+                      setNewTableName("");
+                      setNewColumns([{ ...EMPTY_COLUMN }]);
+                    }}
                     className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-400 transition-colors"
                   >
                     취소
                   </button>
                   <button
                     onClick={handleAddTable}
-                    disabled={!newLabel.trim() || !newContent.trim()}
+                    disabled={!newLabel.trim() || newColumns.every((c) => !c.name.trim())}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-xs font-medium transition-colors"
                   >
                     <Save size={12} />
