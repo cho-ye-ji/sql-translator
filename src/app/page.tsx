@@ -47,6 +47,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [expandedChipId, setExpandedChipId] = useState<string | null>(null);
   const [newLabel, setNewLabel] = useState("");
   const [newTableName, setNewTableName] = useState("");
   const [newColumns, setNewColumns] = useState<Column[]>([{ ...EMPTY_COLUMN }]);
@@ -303,23 +304,43 @@ export default function Home() {
               </div>
             )}
 
-            {/* 선택된 칩 */}
+            {/* 선택된 칩 + 컬럼 펼치기 */}
             {selectedIds.length > 0 && (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col gap-2">
                 {selectedIds.map((id) => {
                   const t = tables.find((t) => t.id === id);
                   if (!t) return null;
+                  const isExpanded = expandedChipId === id;
                   return (
-                    <span
-                      key={id}
-                      className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-600 border border-blue-500 text-white"
-                    >
-                      {t.label}
-                      <span className="opacity-60 font-mono">{t.tableName}</span>
-                      <button onClick={() => removeSelected(id)} className="hover:text-blue-200 transition-colors">
-                        <X size={11} />
-                      </button>
-                    </span>
+                    <div key={id} className="flex flex-col gap-1">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setExpandedChipId(isExpanded ? null : id)}
+                          className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-600 border border-blue-500 text-white hover:bg-blue-500 transition-colors"
+                        >
+                          {t.label}
+                          <span className="opacity-60 font-mono">{t.tableName}</span>
+                          <span className="opacity-50 text-[10px]">{isExpanded ? "▲" : "▼"}</span>
+                        </button>
+                        <button onClick={() => { removeSelected(id); setExpandedChipId(null); }} className="text-zinc-600 hover:text-red-400 transition-colors">
+                          <X size={12} />
+                        </button>
+                      </div>
+                      {isExpanded && (
+                        <div className="ml-2 rounded-lg border border-zinc-800 bg-zinc-900/60 overflow-hidden">
+                          <div className="grid grid-cols-[1fr_1fr] px-3 py-1.5 border-b border-zinc-800">
+                            <span className="text-[10px] text-zinc-600 uppercase tracking-widest">컬럼명</span>
+                            <span className="text-[10px] text-zinc-600 uppercase tracking-widest">설명</span>
+                          </div>
+                          {t.columns.map((c, i) => (
+                            <div key={i} className="grid grid-cols-[1fr_1fr] px-3 py-1.5 border-b border-zinc-800/50 last:border-0">
+                              <span className="text-xs font-mono text-zinc-300">{c.name}</span>
+                              <span className="text-xs text-zinc-500">{c.description || "—"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
